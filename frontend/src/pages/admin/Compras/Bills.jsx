@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Table,
   TableHeader,
@@ -15,17 +15,20 @@ import {
   Chip,
   User,
   Pagination,
-  Select,
-  SelectItem,
 } from "@nextui-org/react";
-import { ChevronDownIcon, DeleteIcon, EditIcon, EyeIcon, PlusIcon, SearchIcon, VerticalDotsIcon } from './Icons.jsx';
-
-import { columns, users, statusOptions } from "./data";
-import { capitalize } from "./Utils";
+import {
+  ChevronDownIcon,
+  DeleteIcon,
+  EditIcon,
+  EyeIcon,
+  SearchIcon,
+  VerticalDotsIcon,
+} from "../../../components/Icons.jsx";
+import { columns, statusOptions } from "../../../components/data.js";
+import { capitalize } from "../../../components/Utils.js";
 import { CSVLink } from "react-csv";
 import { saveAs } from "file-saver";
 import Papa from "papaparse";
-// import XLSX from "xlsx";
 import jsPDF from "jspdf";
 
 const statusColorMap = {
@@ -62,7 +65,15 @@ export default function App() {
   });
   const [page, setPage] = React.useState(1);
 
-  const hasSearchFilter = Boolean(filterValue);
+  // Estado para los datos obtenidos de la API
+  const [productos, setProductos] = useState([]);
+
+  useEffect(() => {
+    fetch("http://127.0.0.1:8000/api/compra")
+      .then((res) => res.json())
+      .then((data) => setProductos(data))
+      .catch((error) => console.error(error));
+  }, []);
 
   const headerColumns = React.useMemo(() => {
     if (visibleColumns === "all") return columns;
@@ -73,24 +84,24 @@ export default function App() {
   }, [visibleColumns]);
 
   const filteredItems = React.useMemo(() => {
-    let filteredUsers = [...users];
+    let filteredProductos = [...productos];
 
-    if (hasSearchFilter) {
-      filteredUsers = filteredUsers.filter((user) =>
-        user.name.toLowerCase().includes(filterValue.toLowerCase())
+    if (filterValue) {
+      filteredProductos = filteredProductos.filter((producto) =>
+        producto.nombre.toLowerCase().includes(filterValue.toLowerCase())
       );
     }
     if (
       statusFilter !== "all" &&
-      Array.from(statusFilter).length !== statusOptions.length
+      statusFilter.length !== statusOptions.length
     ) {
-      filteredUsers = filteredUsers.filter((user) =>
-        Array.from(statusFilter).includes(user.marca)
+      filteredProductos = filteredProductos.filter((producto) =>
+        statusFilter.includes(producto.marca)
       );
     }
 
-    return filteredUsers;
-  }, [users, filterValue, statusFilter]);
+    return filteredProductos;
+  }, [productos, filterValue, statusFilter]);
 
   const pages = Math.ceil(filteredItems.length / rowsPerPage);
 
@@ -111,25 +122,27 @@ export default function App() {
     });
   }, [sortDescriptor, items]);
 
-  const renderCell = React.useCallback((user, columnKey) => {
-    const cellValue = user[columnKey];
-
+  const renderCell = React.useCallback((producto, columnKey) => {
+    const cellValue = producto[columnKey];
+    console.log(producto);
     switch (columnKey) {
       case "imagen":
-        return <User avatarProps={{ radius: "lg", src: user.avatar }}></User>;
+        return (
+          <User avatarProps={{ radius: "lg", src: producto.avatar }}></User>
+        );
+
       case "nombre":
         return (
           <p className="text-bold text-tiny capitalize text-default-400 text-[16px]">
-            {user.name}
+            {producto.nombre}
           </p>
         );
-
       case "codigo":
         return (
           <div className="flex flex-col">
             <p className="text-bold text-small capitalize">{cellValue}</p>
             <p className="text-bold text-tiny capitalize text-default-400">
-              {user.team}
+              {producto.cod}
             </p>
           </div>
         );
@@ -137,13 +150,24 @@ export default function App() {
         return (
           <Chip
             className="capitalize"
-            color={statusColorMap[user.marca]}
+            color={statusColorMap[cellValue.marca]}
             size="sm"
             variant="flat"
           >
             {cellValue}
           </Chip>
         );
+
+      case "categoria":
+        return (
+          <div className="flex flex-col">
+            <p className="text-bold text-small capitalize"></p>
+            <p className="text-bold text-tiny capitalize text-default-400">
+              {cellValue.nombre}
+            </p>
+          </div>
+        );
+
       case "actions":
         return (
           <div className="relative flex justify-end items-center gap-2">
@@ -173,8 +197,11 @@ export default function App() {
             </Dropdown>
           </div>
         );
+
       default:
-        return cellValue;
+        return typeof cellValue === "object"
+          ? JSON.stringify(cellValue)
+          : cellValue;
     }
   }, []);
 
@@ -211,24 +238,14 @@ export default function App() {
 
   //exportacion
   const options = [5, 10, 15];
-  const [csvData, setCsvData] = useState([]);
-
-  //   const handleExportExcel = async () => {
-  //     const xlsx = await import("xlsx");
-  //     const worksheet = xlsx.utils.json_to_sheet(users);
-  //     const workbook = xlsx.utils.book_new();
-  //     xlsx.utils.book_append_sheet(workbook, worksheet, "Sheet1");
-  //     xlsx.writeFile(workbook, "data.xlsx");
-  //   };
-
   const handleExportPDF = () => {
     const doc = new jsPDF();
-    doc.text(JSON.stringify(users), 10, 10);
+    doc.text(JSON.stringify(productos), 10, 10);
     doc.save("data.pdf");
   };
 
   const handleExportCSV = () => {
-    const formattedData = users.map((item) => ({
+    const formattedData = productos.map((item) => ({
       id: item.id,
       name: item.name,
       precio: item.precio,
@@ -250,7 +267,7 @@ export default function App() {
         <div className="flex justify-between  gap-3 items-end ">
           <Input
             isClearable
-            className="w-full sm:max-w-[30%] h-8 rounded-md mb-4"
+            className="border-2 border-blue-500 rounded-xl w-[30%]"
             placeholder="Search by name..."
             startContent={<SearchIcon />}
             value={filterValue}
@@ -313,7 +330,7 @@ export default function App() {
 
         <div className="flex justify-between items-center">
           <span className="text-default-400 text-medium">
-            Total {users.length} users
+            Total {productos.length} productos
           </span>
           <label className="flex items-center text-default-400 text-medium">
             Rows per page:
@@ -336,16 +353,6 @@ export default function App() {
           >
             Export to CSV
           </button>
-          {csvData.length > 0 && (
-            <CSVLink
-              data={csvData}
-              filename={"data.csv"}
-              className="mt-2 block"
-              target="_blank"
-            >
-              Download CSV
-            </CSVLink>
-          )}
           <button
             className=" bg-blue-500  hover:bg-blue-700 text-white font-bold py-[6px] px-4 rounded"
             onClick={handleExportPDF}
@@ -367,9 +374,9 @@ export default function App() {
     statusFilter,
     visibleColumns,
     onRowsPerPageChange,
-    users.length,
+    productos.length,
     onSearchChange,
-    hasSearchFilter,
+    filteredItems.length,
   ]);
 
   const bottomContent = React.useMemo(() => {
@@ -390,7 +397,7 @@ export default function App() {
           onChange={setPage}
         />
         <div className="hidden sm:flex w-[30%] justify-end gap-2">
-          <Button  className="bg-blue-500 hover:bg-blue-700 text-white text-[15px] "
+          <Button
             isDisabled={pages === 1}
             size="sm"
             variant="flat"
@@ -398,7 +405,7 @@ export default function App() {
           >
             Previous
           </Button>
-          <Button className="bg-blue-500 hover:bg-blue-700 text-white text-[15px] "
+          <Button
             isDisabled={pages === 1}
             size="sm"
             variant="flat"
@@ -409,7 +416,7 @@ export default function App() {
         </div>
       </div>
     );
-  }, [selectedKeys, items.length, page, pages, hasSearchFilter]);
+  }, [selectedKeys, items.length, page, pages, filterValue]);
 
   return (
     <Table
@@ -439,11 +446,11 @@ export default function App() {
           </TableColumn>
         )}
       </TableHeader>
-      <TableBody emptyContent={"No users found"} items={sortedItems}>
-        {(item) => (
-          <TableRow key={item.id}>
+      <TableBody emptyContent={"No productos found"} items={sortedItems}>
+        {(producto) => (
+          <TableRow key={producto.id}>
             {(columnKey) => (
-              <TableCell>{renderCell(item, columnKey)}</TableCell>
+              <TableCell>{renderCell(producto, columnKey)}</TableCell>
             )}
           </TableRow>
         )}

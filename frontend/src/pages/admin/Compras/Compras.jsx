@@ -1,5 +1,5 @@
 import React from "react";
-import Bills from "../../components/Bills";
+import Bills from "./Bills";
 
 const Compras = () => {
   return (

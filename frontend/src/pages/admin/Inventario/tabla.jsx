@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Table,
   TableHeader,
@@ -15,27 +15,22 @@ import {
   Chip,
   User,
   Pagination,
-  Select,
-  SelectItem,
 } from "@nextui-org/react";
 import {
   ChevronDownIcon,
   DeleteIcon,
   EditIcon,
   EyeIcon,
-  PlusIcon,
   SearchIcon,
   VerticalDotsIcon,
-} from "./Icons.jsx";
-
-import { columns, users, statusOptions } from "./data";
-import { useProductosData } from "./api";
-import { capitalize } from "./Utils";
+} from "../../../components/Icons.jsx";
+import { columns, statusOptions } from "../../../components/data.js";
+import { capitalize } from "../../../components/Utils.js";
 import { CSVLink } from "react-csv";
 import { saveAs } from "file-saver";
 import Papa from "papaparse";
-// import XLSX from "xlsx";
 import jsPDF from "jspdf";
+import { Link } from "react-router-dom";
 
 const statusColorMap = {
   active: "success",
@@ -54,9 +49,7 @@ const INITIAL_VISIBLE_COLUMNS = [
   "actions",
 ];
 
-export default function TableComponent() {
-  const productos = useProductosData();
-  console.log(productos);
+export default function App() {
   const iconClasses =
     "text-xl text-default-500 pointer-events-none flex-shrink-0";
   const [filterValue, setFilterValue] = React.useState("");
@@ -73,7 +66,15 @@ export default function TableComponent() {
   });
   const [page, setPage] = React.useState(1);
 
-  const hasSearchFilter = Boolean(filterValue);
+  // Estado para los datos obtenidos de la API
+  const [productos, setProductos] = useState([]);
+
+  useEffect(() => {
+    fetch("http://127.0.0.1:8000/api/producto")
+      .then((res) => res.json())
+      .then((data) => setProductos(data))
+      .catch((error) => console.error(error));
+  }, []);
 
   const headerColumns = React.useMemo(() => {
     if (visibleColumns === "all") return columns;
@@ -84,24 +85,24 @@ export default function TableComponent() {
   }, [visibleColumns]);
 
   const filteredItems = React.useMemo(() => {
-    let filteredUsers = [...users];
+    let filteredProductos = [...productos];
 
-    if (hasSearchFilter) {
-      filteredUsers = filteredUsers.filter((user) =>
-        user.name.toLowerCase().includes(filterValue.toLowerCase())
+    if (filterValue) {
+      filteredProductos = filteredProductos.filter((producto) =>
+        producto.nombre.toLowerCase().includes(filterValue.toLowerCase())
       );
     }
     if (
       statusFilter !== "all" &&
-      Array.from(statusFilter).length !== statusOptions.length
+      statusFilter.length !== statusOptions.length
     ) {
-      filteredUsers = filteredUsers.filter((user) =>
-        Array.from(statusFilter).includes(user.marca)
+      filteredProductos = filteredProductos.filter((producto) =>
+        statusFilter.includes(producto.marca)
       );
     }
 
-    return filteredUsers;
-  }, [users, filterValue, statusFilter]);
+    return filteredProductos;
+  }, [productos, filterValue, statusFilter]);
 
   const pages = Math.ceil(filteredItems.length / rowsPerPage);
 
@@ -122,25 +123,27 @@ export default function TableComponent() {
     });
   }, [sortDescriptor, items]);
 
-  const renderCell = React.useCallback((user, columnKey) => {
-    const cellValue = user[columnKey];
-
+  const renderCell = React.useCallback((producto, columnKey) => {
+    const cellValue = producto[columnKey];
+    console.log(producto);
     switch (columnKey) {
       case "imagen":
-        return <User avatarProps={{ radius: "lg", src: user.avatar }}></User>;
+        return (
+          <User avatarProps={{ radius: "lg", src: producto.avatar }}></User>
+        );
+
       case "nombre":
         return (
           <p className="text-bold text-tiny capitalize text-default-400 text-[16px]">
-            {user.nombre}
+            {producto.nombre}
           </p>
         );
-
       case "codigo":
         return (
           <div className="flex flex-col">
             <p className="text-bold text-small capitalize">{cellValue}</p>
             <p className="text-bold text-tiny capitalize text-default-400">
-              {user.team}
+              {producto.cod}
             </p>
           </div>
         );
@@ -148,13 +151,24 @@ export default function TableComponent() {
         return (
           <Chip
             className="capitalize"
-            color={statusColorMap[user.marca]}
+            color={statusColorMap[cellValue.marca]}
             size="sm"
             variant="flat"
           >
             {cellValue}
           </Chip>
         );
+
+      case "categoria":
+        return (
+          <div className="flex flex-col">
+            <p className="text-bold text-small capitalize"></p>
+            <p className="text-bold text-tiny capitalize text-default-400">
+              {cellValue.nombre}
+            </p>
+          </div>
+        );
+
       case "actions":
         return (
           <div className="relative flex justify-end items-center gap-2">
@@ -184,8 +198,11 @@ export default function TableComponent() {
             </Dropdown>
           </div>
         );
+
       default:
-        return cellValue;
+        return typeof cellValue === "object"
+          ? JSON.stringify(cellValue)
+          : cellValue;
     }
   }, []);
 
@@ -222,24 +239,14 @@ export default function TableComponent() {
 
   //exportacion
   const options = [5, 10, 15];
-  const [csvData, setCsvData] = useState([]);
-
-  //   const handleExportExcel = async () => {
-  //     const xlsx = await import("xlsx");
-  //     const worksheet = xlsx.utils.json_to_sheet(users);
-  //     const workbook = xlsx.utils.book_new();
-  //     xlsx.utils.book_append_sheet(workbook, worksheet, "Sheet1");
-  //     xlsx.writeFile(workbook, "data.xlsx");
-  //   };
-
   const handleExportPDF = () => {
     const doc = new jsPDF();
-    doc.text(JSON.stringify(users), 10, 10);
+    doc.text(JSON.stringify(productos), 10, 10);
     doc.save("data.pdf");
   };
 
   const handleExportCSV = () => {
-    const formattedData = users.map((item) => ({
+    const formattedData = productos.map((item) => ({
       id: item.id,
       name: item.name,
       precio: item.precio,
@@ -258,10 +265,10 @@ export default function TableComponent() {
   const topContent = React.useMemo(() => {
     return (
       <div className="flex flex-col gap-3 ">
-        <div className="flex justify-between  gap-3 items-end  ">
+        <div className="flex justify-between  gap-3 items-end ">
           <Input
             isClearable
-            className=" border-2 border-blue-500 rounded-xl w-[30%] "
+            className="border-2 border-blue-500 rounded-xl w-[30%]"
             placeholder="Search by name..."
             startContent={<SearchIcon />}
             value={filterValue}
@@ -272,7 +279,7 @@ export default function TableComponent() {
             <Dropdown>
               <DropdownTrigger className="hidden sm:flex">
                 <Button
-                  className="bg-blue-500 text-white hover:bg-blue-700"
+                  className="bg-blue-500 text-white"
                   endContent={<ChevronDownIcon className="text-small" />}
                   variant="flat"
                 >
@@ -323,13 +330,13 @@ export default function TableComponent() {
         </div>
 
         <div className="flex justify-between items-center">
-          <span className=" text-medium text-[#6b6f77]">
-            Total {users.length} users
+          <span className="text-default-400 text-medium">
+            Total {productos.length} productos
           </span>
-          <label className="flex items-center text-[#6b6f77]  text-medium">
+          <label className="flex items-center text-default-400 text-medium">
             Rows per page:
             <select
-              className="ml-[20px] bg-transparent outline-none text-default-500 text-medium rounded-md"
+              className="ml-[20px] bg-transparent outline-none text-default-400 text-medium rounded-md"
               onChange={onRowsPerPageChange}
             >
               {options.map((value) => (
@@ -347,29 +354,18 @@ export default function TableComponent() {
           >
             Export to CSV
           </button>
-          {csvData.length > 0 && (
-            <CSVLink
-              data={csvData}
-              filename={"data.csv"}
-              className="mt-2 block"
-              target="_blank"
-            >
-              Download CSV
-            </CSVLink>
-          )}
           <button
             className=" bg-blue-500  hover:bg-blue-700 text-white font-bold py-[6px] px-4 rounded"
             onClick={handleExportPDF}
           >
             Export to PDF
           </button>
+          <div>
+            <Button color="primary" className="w-[130px] absolute right-0">
+              <Link to="/inventario/add">Añadir Producto</Link>
+            </Button>
+          </div>
         </div>
-        {/* <button
-            onClick={}
-            className=" bg-blue-500  hover:bg-blue-700 text-white font-bold py-[6px] px-4 rounded"
-          >
-            AGREGAR PRODUCTO
-          </button> */}
         <div>
           {/* Botón para exportar a Excel */}
           {/* <button onClick={handleExportExcel}>Export to Excel</button> */}
@@ -384,15 +380,15 @@ export default function TableComponent() {
     statusFilter,
     visibleColumns,
     onRowsPerPageChange,
-    users.length,
+    productos.length,
     onSearchChange,
-    hasSearchFilter,
+    filteredItems.length,
   ]);
 
   const bottomContent = React.useMemo(() => {
     return (
       <div className="py-2 px-2 flex justify-between items-center">
-        <span className="w-[30%] text-medium text-[#6b6f77] ">
+        <span className="w-[30%] text-medium text-default-400">
           {selectedKeys === "all"
             ? "All items selected"
             : `${selectedKeys.size} of ${filteredItems.length} selected`}
@@ -408,7 +404,6 @@ export default function TableComponent() {
         />
         <div className="hidden sm:flex w-[30%] justify-end gap-2">
           <Button
-            className="bg-blue-500 hover:bg-blue-700 text-white text-[15px] "
             isDisabled={pages === 1}
             size="sm"
             variant="flat"
@@ -417,7 +412,6 @@ export default function TableComponent() {
             Previous
           </Button>
           <Button
-            className="bg-blue-500 hover:bg-blue-700 text-white text-[15px] "
             isDisabled={pages === 1}
             size="sm"
             variant="flat"
@@ -428,7 +422,7 @@ export default function TableComponent() {
         </div>
       </div>
     );
-  }, [selectedKeys, items.length, page, pages, hasSearchFilter]);
+  }, [selectedKeys, items.length, page, pages, filterValue]);
 
   return (
     <Table
@@ -458,11 +452,11 @@ export default function TableComponent() {
           </TableColumn>
         )}
       </TableHeader>
-      <TableBody emptyContent={"No users found"} items={sortedItems}>
-        {(item) => (
-          <TableRow key={item.id}>
+      <TableBody emptyContent={"No productos found"} items={sortedItems}>
+        {(producto) => (
+          <TableRow key={producto.id}>
             {(columnKey) => (
-              <TableCell>{renderCell(item, columnKey)}</TableCell>
+              <TableCell>{renderCell(producto, columnKey)}</TableCell>
             )}
           </TableRow>
         )}
